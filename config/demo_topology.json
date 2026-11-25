@@ -1,0 +1,90 @@
+{
+  "meta": {
+    "name": "Demo - Apple-style electronics supply chain",
+    "currency": "USD",
+    "description": "ILLUSTRATIVE DATA ONLY. Locations are real cities, but every capacity, cost and transit time is invented for the demo."
+  },
+
+  "resources": [
+    {"id": "CHIPS",     "type": "COMPONENT", "unit": "units", "description": "Processor chips"},
+    {"id": "DISPLAYS",  "type": "COMPONENT", "unit": "units", "description": "Display panels"},
+    {"id": "BATTERIES", "type": "COMPONENT", "unit": "units", "description": "Battery packs"}
+  ],
+
+  "nodes": [
+    {"id": "SUP-TW", "name": "Chip Fab - Hsinchu", "role": "SUPPLIER", "lat": 24.80, "lon": 120.97,
+     "supply": {"CHIPS": {"capacity_per_day": 6000, "unit_cost": 14.0}},
+     "stock": {"CHIPS": 30000}},
+    {"id": "SUP-JP", "name": "Chip & Display Backup - Kumamoto", "role": "SUPPLIER", "lat": 32.80, "lon": 130.71,
+     "supply": {"CHIPS": {"capacity_per_day": 2500, "unit_cost": 16.5},
+                "DISPLAYS": {"capacity_per_day": 2000, "unit_cost": 24.0}},
+     "stock": {"CHIPS": 8000, "DISPLAYS": 6000}},
+    {"id": "SUP-KR", "name": "Display Maker - Asan", "role": "SUPPLIER", "lat": 36.78, "lon": 127.00,
+     "supply": {"DISPLAYS": {"capacity_per_day": 5000, "unit_cost": 22.0}},
+     "stock": {"DISPLAYS": 20000}},
+    {"id": "SUP-CN", "name": "Battery Plant - Shenzhen", "role": "SUPPLIER", "lat": 22.54, "lon": 114.06,
+     "supply": {"BATTERIES": {"capacity_per_day": 6000, "unit_cost": 9.0}},
+     "stock": {"BATTERIES": 25000}},
+
+    {"id": "HUB-SH", "name": "Hub - Shanghai", "role": "HUB", "lat": 31.23, "lon": 121.47,
+     "storage": {"CHIPS": 50000, "DISPLAYS": 50000, "BATTERIES": 50000}},
+    {"id": "HUB-HK", "name": "Hub - Hong Kong", "role": "HUB", "lat": 22.31, "lon": 114.17,
+     "storage": {"CHIPS": 50000, "DISPLAYS": 50000, "BATTERIES": 50000}},
+    {"id": "HUB-SG", "name": "Hub - Singapore", "role": "HUB", "lat": 1.29, "lon": 103.85,
+     "storage": {"CHIPS": 40000, "DISPLAYS": 40000, "BATTERIES": 40000}},
+
+    {"id": "ASM-ZZ", "name": "Assembly - Zhengzhou", "role": "ASSEMBLY", "lat": 34.75, "lon": 113.62,
+     "demand": {"CHIPS": 3000, "DISPLAYS": 3000, "BATTERIES": 3000}},
+    {"id": "ASM-CH", "name": "Assembly - Chennai", "role": "ASSEMBLY", "lat": 13.08, "lon": 80.27,
+     "demand": {"CHIPS": 1500, "DISPLAYS": 1500, "BATTERIES": 1500}}
+  ],
+
+  "routes": [
+    {"id": "R-TW-SH", "from": "SUP-TW", "to": "HUB-SH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.2, "transit_days": 1, "capacity_per_day": 2500},
+       "sea": {"cost_per_unit": 0.45, "transit_days": 2, "capacity_per_day": 12000}}},
+    {"id": "R-TW-HK", "from": "SUP-TW", "to": "HUB-HK", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.0, "transit_days": 1, "capacity_per_day": 2500},
+       "sea": {"cost_per_unit": 0.40, "transit_days": 3, "capacity_per_day": 12000}}},
+    {"id": "R-KR-SH", "from": "SUP-KR", "to": "HUB-SH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.6, "transit_days": 1, "capacity_per_day": 2000},
+       "sea": {"cost_per_unit": 0.55, "transit_days": 3, "capacity_per_day": 10000}}},
+    {"id": "R-KR-HK", "from": "SUP-KR", "to": "HUB-HK", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 4.0, "transit_days": 2, "capacity_per_day": 2000},
+       "sea": {"cost_per_unit": 0.60, "transit_days": 4, "capacity_per_day": 10000}}},
+    {"id": "R-CN-HK", "from": "SUP-CN", "to": "HUB-HK", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 2.8, "transit_days": 1, "capacity_per_day": 1500},
+       "sea": {"cost_per_unit": 0.30, "transit_days": 1, "capacity_per_day": 15000}}},
+    {"id": "R-CN-SH", "from": "SUP-CN", "to": "HUB-SH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.3, "transit_days": 1, "capacity_per_day": 1500},
+       "sea": {"cost_per_unit": 0.40, "transit_days": 3, "capacity_per_day": 15000}}},
+    {"id": "R-JP-SH", "from": "SUP-JP", "to": "HUB-SH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 4.2, "transit_days": 1, "capacity_per_day": 1500},
+       "sea": {"cost_per_unit": 0.70, "transit_days": 3, "capacity_per_day": 8000}}},
+    {"id": "R-JP-SG", "from": "SUP-JP", "to": "HUB-SG", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 5.5, "transit_days": 2, "capacity_per_day": 1500},
+       "sea": {"cost_per_unit": 0.95, "transit_days": 7, "capacity_per_day": 8000}}},
+
+    {"id": "R-SH-ZZ", "from": "HUB-SH", "to": "ASM-ZZ", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 2.4, "transit_days": 1, "capacity_per_day": 3000},
+       "rail": {"cost_per_unit": 0.25, "transit_days": 2, "capacity_per_day": 15000}}},
+    {"id": "R-HK-ZZ", "from": "HUB-HK", "to": "ASM-ZZ", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 2.6, "transit_days": 1, "capacity_per_day": 3000},
+       "rail": {"cost_per_unit": 0.30, "transit_days": 3, "capacity_per_day": 12000}}},
+    {"id": "R-SH-CH", "from": "HUB-SH", "to": "ASM-CH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.8, "transit_days": 2, "capacity_per_day": 2000},
+       "sea": {"cost_per_unit": 0.60, "transit_days": 9, "capacity_per_day": 10000}}},
+    {"id": "R-HK-CH", "from": "HUB-HK", "to": "ASM-CH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 3.4, "transit_days": 2, "capacity_per_day": 2000},
+       "sea": {"cost_per_unit": 0.50, "transit_days": 6, "capacity_per_day": 10000}}},
+    {"id": "R-SG-CH", "from": "HUB-SG", "to": "ASM-CH", "status": "ACTIVE", "modes": {
+       "air": {"cost_per_unit": 2.6, "transit_days": 1, "capacity_per_day": 2000},
+       "sea": {"cost_per_unit": 0.35, "transit_days": 4, "capacity_per_day": 10000}}}
+  ],
+
+  "solver": {
+    "shortage_penalty": 500,
+    "time_value_per_day": 0.8,
+    "horizon_days": 1
+  }
+}

@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    background-color: #090c10;
+    color: #e5ebf3;
+    font-size: 12px;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.offline-grid-bg {
+  background-color: #070a0e;
+  background-image:
+    linear-gradient(rgba(31, 41, 55, 0.28) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 41, 55, 0.28) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.leaflet-container {
+  background: transparent !important;
+  font-family: inherit;
+}
+
+/* Custom sleek scrollbars for dense telemetry panels */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #090c10;
+}
+::-webkit-scrollbar-thumb {
+  background: #2e3c4f;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

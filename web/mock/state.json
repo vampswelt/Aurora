@@ -1,0 +1,281 @@
+{
+  "time": "2026-11-23T00:02:00",
+  "nodes": [
+    {
+      "id": "SUP-TW",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 1,
+      "memory_pct": 1.4,
+      "cpu_pct": 4.2,
+      "active_jobs": 1,
+      "inventory": {
+        "CHIPS": 30000.0
+      }
+    },
+    {
+      "id": "SUP-KR",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 2,
+      "memory_pct": 1.6,
+      "cpu_pct": 5.1,
+      "active_jobs": 1,
+      "inventory": {
+        "DISPLAYS": 24000.0
+      }
+    },
+    {
+      "id": "SUP-CN",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 1,
+      "memory_pct": 1.2,
+      "cpu_pct": 3.8,
+      "active_jobs": 0,
+      "inventory": {
+        "BATTERIES": 42000.0
+      }
+    },
+    {
+      "id": "HUB-SH",
+      "status": "DEGRADED",
+      "disrupted": false,
+      "heartbeat_age_s": 4,
+      "memory_pct": 2.9,
+      "cpu_pct": 14.6,
+      "active_jobs": 2,
+      "inventory": {
+        "CHIPS": 4500.0,
+        "DISPLAYS": 3800.0,
+        "BATTERIES": 6000.0
+      }
+    },
+    {
+      "id": "HUB-HK",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 1,
+      "memory_pct": 2.4,
+      "cpu_pct": 11.2,
+      "active_jobs": 2,
+      "inventory": {
+        "CHIPS": 2200.0,
+        "DISPLAYS": 1900.0
+      }
+    },
+    {
+      "id": "ASM-ZZ",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 2,
+      "memory_pct": 3.8,
+      "cpu_pct": 22.4,
+      "active_jobs": 3,
+      "inventory": {
+        "DEVICES": 9400.0
+      }
+    },
+    {
+      "id": "ASM-VN",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 2,
+      "memory_pct": 2.1,
+      "cpu_pct": 12.0,
+      "active_jobs": 1,
+      "inventory": {
+        "DEVICES": 4100.0
+      }
+    },
+    {
+      "id": "HUB-US",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 3,
+      "memory_pct": 1.9,
+      "cpu_pct": 6.4,
+      "active_jobs": 1,
+      "inventory": {
+        "DEVICES": 11200.0
+      }
+    },
+    {
+      "id": "HUB-EU",
+      "status": "ONLINE",
+      "disrupted": false,
+      "heartbeat_age_s": 2,
+      "memory_pct": 1.8,
+      "cpu_pct": 5.9,
+      "active_jobs": 1,
+      "inventory": {
+        "DEVICES": 7600.0
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "R-TW-SH",
+      "status": "ACTIVE",
+      "flows": {
+        "sea": {
+          "CHIPS": 2100.0
+        },
+        "air": {}
+      }
+    },
+    {
+      "id": "R-TW-HK",
+      "status": "ACTIVE",
+      "flows": {
+        "air": {
+          "CHIPS": 1800.0
+        },
+        "sea": {
+          "CHIPS": 2600.0
+        }
+      }
+    },
+    {
+      "id": "R-KR-SH",
+      "status": "ACTIVE",
+      "flows": {
+        "sea": {
+          "DISPLAYS": 1900.0
+        },
+        "air": {}
+      }
+    },
+    {
+      "id": "R-KR-HK",
+      "status": "ACTIVE",
+      "flows": {
+        "air": {
+          "DISPLAYS": 2100.0
+        }
+      }
+    },
+    {
+      "id": "R-CN-SH",
+      "status": "ACTIVE",
+      "flows": {
+        "rail": {
+          "BATTERIES": 2400.0
+        },
+        "road": {}
+      }
+    },
+    {
+      "id": "R-CN-HK",
+      "status": "ACTIVE",
+      "flows": {
+        "rail": {
+          "BATTERIES": 4100.0
+        },
+        "road": {}
+      }
+    },
+    {
+      "id": "R-SH-ZZ",
+      "status": "DISRUPTED",
+      "flows": {}
+    },
+    {
+      "id": "R-HK-ZZ",
+      "status": "ACTIVE",
+      "flows": {
+        "rail": {
+          "CHIPS": 3200.0,
+          "DISPLAYS": 3100.0,
+          "BATTERIES": 3000.0
+        },
+        "air": {
+          "CHIPS": 1300.0
+        }
+      }
+    },
+    {
+      "id": "R-HK-VN",
+      "status": "ACTIVE",
+      "flows": {
+        "sea": {
+          "CHIPS": 2000.0,
+          "DISPLAYS": 2000.0,
+          "BATTERIES": 2000.0
+        }
+      }
+    },
+    {
+      "id": "R-ZZ-US",
+      "status": "ACTIVE",
+      "flows": {
+        "air": {
+          "DEVICES": 2800.0
+        },
+        "sea": {
+          "DEVICES": 1400.0
+        }
+      }
+    },
+    {
+      "id": "R-ZZ-EU",
+      "status": "ACTIVE",
+      "flows": {
+        "rail": {
+          "DEVICES": 1500.0
+        },
+        "air": {
+          "DEVICES": 800.0
+        }
+      }
+    },
+    {
+      "id": "R-VN-US",
+      "status": "ACTIVE",
+      "flows": {
+        "sea": {
+          "DEVICES": 1200.0
+        }
+      }
+    },
+    {
+      "id": "R-VN-EU",
+      "status": "ACTIVE",
+      "flows": {
+        "sea": {
+          "DEVICES": 900.0
+        }
+      }
+    }
+  ],
+  "scheduler": {
+    "policy": "PRIORITY",
+    "queue_depth": 2,
+    "workers": 4,
+    "aging_interval_s": 15,
+    "dispatched": 418
+  },
+  "database": {
+    "transactions": 1942,
+    "deadlock_retries": 3,
+    "failures": 0,
+    "avg_tx_ms": 2.84,
+    "write_slots": 4
+  },
+  "solver": {
+    "status": "OPTIMAL",
+    "objective_cost": 132770.0,
+    "shipping_cost": 132770.0,
+    "shortage_cost": 0.0,
+    "solve_ms": 18,
+    "unmet": {},
+    "reason": "disruption",
+    "computed_at": "2026-11-23T00:01:44"
+  },
+  "system": {
+    "cpu_pct": 16.4,
+    "mem_pct": 38.2,
+    "threads": 18,
+    "nodes_online": 9
+  }
+}

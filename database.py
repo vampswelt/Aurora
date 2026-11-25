@@ -1,3 +1,19 @@
+"""
+database.py : Central DBMS layer.
+
+* ConnectionPool        - fixed-size pool of PyMySQL connections (PyMySQL has none built in).
+* run_transaction()     - runs a function in one transaction; on MySQL deadlock (1213) or
+                          lock-wait timeout (1205) it ROLLBACKs, waits (exponential backoff + jitter)
+                          and retries.
+* Write semaphore       - threading.Semaphore throttling concurrent DB writers (simulated bounded
+                          system resource).
+* Domain handlers       - register_node, record_heartbeat, create_process, allocate_process,
+                          confirm_receipt, ...
+
+Global lock order (circular-wait prevention), same in EVERY transaction:
+    1) Request / Allocation rows
+    2) Resource_Inventory rows sorted by (resource_id, node_id)
+"""
 import json
 import logging
 import os
@@ -9,11 +25,18 @@ from contextlib import nullcontext
 
 import pymysql
 from pymysql.cursors import DictCursor
+
 log = logging.getLogger("database")
-DEADLOCK_ERRNOS = {1213, 1205}
+DEADLOCK_ERRNOS = {1213, 1205}  # 1213 = deadlock, 1205 = lock wait timeout
 
 _pool = None
 _write_sem = None
+_write_slots = 0
+
+# Telemetry counters, published to the GUI by central_command.py (see stats()).
+_stats = {"transactions": 0, "deadlock_retries": 0, "failures": 0, "tx_ms_total": 0.0, "write_slots_used": 0}
+_stats_lock = threading.Lock()
+
 
 class ConnectionPool:
     def __init__(self, size, **kwargs):
@@ -36,7 +59,8 @@ class ConnectionPool:
 
 
 def init(pool_size=8, write_slots=4):
-    global _pool, _write_sem
+    """Create the pool and the write-throttling semaphore. Config via env vars."""
+    global _pool, _write_sem, _write_slots
     _pool = ConnectionPool(
         pool_size,
         host=os.getenv("DB_HOST", "127.0.0.1"),
@@ -46,12 +70,17 @@ def init(pool_size=8, write_slots=4):
         database=os.getenv("DB_NAME", "ogas_command"),
     )
     _write_sem = threading.Semaphore(write_slots)
+    _write_slots = write_slots
     log.info("DB pool=%d, write slots=%d", pool_size, write_slots)
 
+
+# --------------------------------------------------------------------------- transactions
 def _attempt(fn, write):
     guard = _write_sem if write else nullcontext()
-    with guard:                       
+    with guard:                       # semaphore: at most N concurrent writers
         conn = _pool.acquire()
+        if write:
+            _bump(write_slots_used=1)
         try:
             conn.begin()
             with conn.cursor() as cur:
@@ -66,26 +95,81 @@ def _attempt(fn, write):
             raise
         finally:
             _pool.release(conn)
+            if write:
+                _bump(write_slots_used=-1)
 
-def run_transaction(fn, write=True, max_retries=5):
+
+def _bump(**changes):
+    with _stats_lock:
+        for key, delta in changes.items():
+            _stats[key] += delta
+
+
+def stats():
+    """Counters for the GUI's database panel."""
+    with _stats_lock:
+        snap = dict(_stats)
+    n = snap["transactions"]
+    return {"transactions": n, "deadlock_retries": snap["deadlock_retries"], "failures": snap["failures"],
+            "avg_tx_ms": round(snap["tx_ms_total"] / n, 2) if n else 0.0,
+            "write_slots": _write_slots, "write_slots_used": snap["write_slots_used"]}
+
+
+def run_transaction(fn, write=True, max_retries=5, count_stats=True):
+    """Run fn(cursor) atomically; auto-retry on deadlock after ROLLBACK."""
+    t0 = time.perf_counter()
     for attempt in range(1, max_retries + 1):
         try:
-            return _attempt(fn, write)
+            result = _attempt(fn, write)
+            if count_stats:
+                _bump(transactions=1, tx_ms_total=(time.perf_counter() - t0) * 1000)
+            return result
         except pymysql.err.OperationalError as e:
             if e.args and e.args[0] in DEADLOCK_ERRNOS and attempt < max_retries:
+                if count_stats:
+                    _bump(deadlock_retries=1)
                 delay = 0.05 * (2 ** attempt) + random.uniform(0, 0.05)
                 log.warning("Deadlock/lock-timeout (%s), rolled back, retry %d/%d in %.2fs",
                             e.args[0], attempt, max_retries - 1, delay)
                 time.sleep(delay)      # sleep OUTSIDE the semaphore
                 continue
+            if count_stats:
+                _bump(failures=1)
             raise
+        except Exception:
+            if count_stats:
+                _bump(failures=1)
+            raise
+
+
+def publish_central_status(active_processes, memory_pct, details):
+    """Store Central's own telemetry as a System_Status row of the node named CENTRAL.
+    The GUI server reads the newest row. Not counted in stats() so it does not inflate them."""
+    def txn(cur):
+        cur.execute("INSERT INTO Node (node_name, status, last_heartbeat) VALUES ('CENTRAL','ONLINE',NOW()) "
+                    "ON DUPLICATE KEY UPDATE status='ONLINE', last_heartbeat=NOW(), node_id=LAST_INSERT_ID(node_id)")
+        node_id = cur.lastrowid
+        cur.execute("INSERT INTO System_Status (node_id, active_processes, memory_usage, status_details) "
+                    "VALUES (%s,%s,%s,%s)", (node_id, active_processes, memory_pct, json.dumps(details)))
+    run_transaction(txn, count_stats=False)
+
+
+def prune_status(hours=1):
+    """Keep System_Status small: heartbeats arrive every few seconds."""
+    run_transaction(lambda cur: cur.execute(
+        "DELETE FROM System_Status WHERE snapshot_time < NOW() - INTERVAL %s HOUR LIMIT 2000", (hours,)),
+        count_stats=False)
 
 
 def _resource_map(cur):
     cur.execute("SELECT resource_id, resource_name FROM Resource")
     return {r["resource_name"]: r["resource_id"] for r in cur.fetchall()}
 
+
+# --------------------------------------------------------------------------- nodes
 def register_node(name, node_type, ip, port, location, capacities, inventory):
+    """Upsert Node + Factory/Warehouse + capacities + inventory rows (central ledger wins on
+    re-registration). Returns (node_id, {resource: available})."""
     def txn(cur):
         rmap = _resource_map(cur)
         cur.execute(
@@ -108,7 +192,7 @@ def register_node(name, node_type, ip, port, location, capacities, inventory):
                     "VALUES (%s,%s,%s) ON DUPLICATE KEY UPDATE max_capacity=VALUES(max_capacity)",
                     (fid, rmap[rname], capacities[rname]))
         names = sorted((n for n in set(inventory) | set(capacities) if n in rmap), key=rmap.get)
-        for rname in names:                                    
+        for rname in names:                                    # global resource order
             cur.execute("INSERT IGNORE INTO Resource_Inventory (resource_id,node_id,available_quantity) "
                         "VALUES (%s,%s,%s)", (rmap[rname], node_id, inventory.get(rname, 0)))
         cur.execute("INSERT INTO System_Event (event_type,event_description,severity,node_id) "
@@ -120,6 +204,7 @@ def register_node(name, node_type, ip, port, location, capacities, inventory):
 
 
 def record_heartbeat(node_id, memory_usage, active_processes, deltas):
+    """Update liveness, store a System_Status snapshot, apply local production/consumption deltas."""
     def txn(cur):
         rmap = _resource_map(cur)
         cur.execute("UPDATE Node SET last_heartbeat=NOW(), status='ONLINE' WHERE node_id=%s", (node_id,))
@@ -134,6 +219,7 @@ def record_heartbeat(node_id, memory_usage, active_processes, deltas):
                 "available_quantity=GREATEST(available_quantity+%s,0)", (rmap[rname], node_id, d, d))
     run_transaction(txn)
 
+
 def mark_stale_nodes(timeout_s):
     def txn(cur):
         cur.execute("SELECT node_id, node_name FROM Node WHERE status='ONLINE' "
@@ -147,12 +233,16 @@ def mark_stale_nodes(timeout_s):
         return [n["node_name"] for n in stale]
     return run_transaction(txn)
 
+
 def log_event(node_id, event_type, description, severity="INFO"):
     run_transaction(lambda cur: cur.execute(
         "INSERT INTO System_Event (event_type,event_description,severity,node_id) VALUES (%s,%s,%s,%s)",
         (event_type, description[:255], severity, node_id)))
 
+
+# --------------------------------------------------------------------------- requests / allocation
 def create_process(node_id, name, priority, items, required_by_s):
+    """One Process + one Request row per (resource, quantity) item. Returns process_id."""
     def txn(cur):
         rmap = _resource_map(cur)
         if not items:
@@ -185,6 +275,14 @@ _SUPPLY_SQL = """
 
 
 def allocate_process(process_id, planner, ttl_s):
+    """
+    Atomic multi-resource allocation (all-or-nothing) for one process.
+      1. SELECT ... FOR UPDATE the process's Request rows
+      2. SELECT ... FOR UPDATE inventory rows in global (resource_id, node_id) order
+      3. planner(requester, requests, supply) -> {request_id: [(supplier_node, qty)]} or None
+      4. move available -> reserved at suppliers, write Allocation rows
+    Returns None | {"status": "SHORTAGE"|"GRANTED", ...}
+    """
     def txn(cur):
         cur.execute("SELECT node_id FROM `Process` WHERE process_id=%s", (process_id,))
         proc = cur.fetchone()
@@ -233,6 +331,7 @@ def deny_process(process_id):
 
 
 def confirm_receipt(allocation_id, requester_id):
+    """Goods arrived: supplier reserved -= q, requester available += q, Allocation -> DELIVERED."""
     def txn(cur):
         cur.execute(
             "SELECT a.resource_id, a.quantity_allocated, a.node_id AS supplier, a.status, "
@@ -260,7 +359,9 @@ def confirm_receipt(allocation_id, requester_id):
         return True
     return run_transaction(txn)
 
+
 def dashboard():
+    """(nodes, resource totals) for the periodic console status line."""
     def txn(cur):
         cur.execute("SELECT node_name, status, TIMESTAMPDIFF(SECOND,last_heartbeat,NOW()) AS age "
                     "FROM Node ORDER BY node_id")

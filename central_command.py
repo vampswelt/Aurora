@@ -1,3 +1,18 @@
+"""
+central_command.py : the Central System.
+
+  CommunicationManager - multi-threaded TCP server (one thread per node connection),
+                         newline-delimited JSON messages.
+  SystemManager        - OS-style scheduler: queue.PriorityQueue + worker threads.
+                         Policy PRIORITY (lower number first, FIFO among equals) or FCFS.
+  Monitor              - heartbeat watchdog + console dashboard.
+  (Central DBMS = database.py, Allocation Engine = optimizer.py)
+
+Node -> Central : REGISTER, HEARTBEAT, REQUEST, RECEIPT
+Central -> Node : REGISTER_OK, REQUEST_QUEUED, ALLOCATION_GRANTED, ALLOCATION_DENIED, SHIP_ORDER, ERROR
+
+Run:  python central_command.py --port 5000 --policy PRIORITY
+"""
 import argparse
 import itertools
 import json
@@ -7,17 +22,21 @@ import socket
 import threading
 import time
 
+import psutil
+
 import database as db
 from optimizer import AllocationEngine
 
 log = logging.getLogger("central")
 
-HEARTBEAT_TIMEOUT = 15      
-MAX_ATTEMPTS = 3           
+HEARTBEAT_TIMEOUT = 15      # s without heartbeat -> node OFFLINE
+MAX_ATTEMPTS = 3            # allocation retries before a request is DENIED
 RETRY_DELAY = 3.0
-ALLOCATION_TTL = 120       
+ALLOCATION_TTL = 120        # s an allocation stays valid
+
 
 class NodeSession:
+    """One connected node; send() is serialised with a lock (workers and handler both write)."""
     def __init__(self, conn, addr):
         self.conn, self.addr = conn, addr
         self.node_id = None
@@ -31,11 +50,14 @@ class NodeSession:
 
 
 class SystemManager:
+    """Schedules pending requisition processes onto allocation worker threads."""
     def __init__(self, policy, workers, engine):
         self.policy, self.engine = policy, engine
         self.queue = queue.PriorityQueue()
-        self._seq = itertools.count()         
+        self._seq = itertools.count()          # FIFO tie-breaker (and the FCFS order)
         self.sessions, self.sessions_lock = {}, threading.Lock()
+        self.counters = {"dispatched": 0, "granted": 0, "denied": 0, "retries": 0}
+        self._counter_lock = threading.Lock()
         self._threads = [threading.Thread(target=self._worker, name=f"sched-{i}", daemon=True)
                          for i in range(workers)]
 
@@ -69,22 +91,37 @@ class SystemManager:
             finally:
                 self.queue.task_done()
 
+    def count(self, name):
+        with self._counter_lock:
+            self.counters[name] += 1
+
+    def snapshot(self):
+        """Scheduler numbers published to the GUI."""
+        with self._counter_lock:
+            counts = dict(self.counters)
+        return {"policy": self.policy, "queue_depth": self.queue.qsize(), "workers": len(self._threads),
+                "aging_interval_s": None, **counts}
+
     def _dispatch(self, pid, prio, attempt):
         res = db.allocate_process(pid, self.engine.plan_process, ALLOCATION_TTL)
         if res is None:
             return
+        self.count("dispatched")
         if res["status"] == "GRANTED":
+            self.count("granted")
             log.info("process %s GRANTED (%d allocations)", pid, len(res["allocations"]))
             self.notify(res["requester"], {"type": "ALLOCATION_GRANTED", "process_id": pid,
                                            "allocations": res["allocations"]})
             for a in res["allocations"]:
                 self.notify(a["supplier_node_id"], {"type": "SHIP_ORDER", **a, "to_node": res["requester"]})
         elif attempt < MAX_ATTEMPTS:
+            self.count("retries")
             t = threading.Timer(RETRY_DELAY, self.submit, (pid, prio, attempt + 1))
             t.daemon = True
             t.start()
         else:
             db.deny_process(pid)
+            self.count("denied")
             log.warning("process %s DENIED after %d attempts", pid, attempt)
             self.notify(res["requester"], {"type": "ALLOCATION_DENIED", "process_id": pid})
 
@@ -168,6 +205,7 @@ class CommunicationManager:
             return None
         return {"type": "ERROR", "error": f"unknown message type {t}"}
 
+
 def monitor(manager, interval=10):
     """Heartbeat watchdog + status line."""
     while True:
@@ -183,6 +221,32 @@ def monitor(manager, interval=10):
         except Exception:
             log.exception("monitor error")
 
+
+def telemetry(manager, interval=2.0, stop=None):
+    """Publish Central's own telemetry for the GUI: scheduler, database, process CPU and memory.
+    stop is an optional threading.Event (used by the tests) that ends the loop."""
+    stop = stop or threading.Event()
+    proc = psutil.Process()
+    proc.cpu_percent(None)                        # prime the non-blocking CPU reading
+    started, cycle = time.time(), 0
+    while not stop.wait(interval):
+        cycle += 1
+        try:
+            sched = manager.snapshot()
+            with manager.sessions_lock:
+                connected = len(manager.sessions)
+            memory = round(proc.memory_percent(), 2)
+            details = {"time": time.time(), "scheduler": sched, "database": db.stats(),
+                       "system": {"cpu_pct": proc.cpu_percent(None), "mem_pct": memory,
+                                  "threads": threading.active_count(), "connected_nodes": connected,
+                                  "uptime_s": int(time.time() - started)}}
+            db.publish_central_status(sched["queue_depth"], memory, details)
+            if cycle % 60 == 0:
+                db.prune_status()
+        except Exception:
+            log.exception("telemetry publish failed")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Central Command server")
     ap.add_argument("--host", default="0.0.0.0")
@@ -191,6 +255,7 @@ def main():
     ap.add_argument("--workers", type=int, default=2, help="scheduler worker threads")
     ap.add_argument("--optimizer-slots", type=int, default=1, help="max concurrent LP solves (semaphore)")
     ap.add_argument("--db-write-slots", type=int, default=4, help="max concurrent DB writers (semaphore)")
+    ap.add_argument("--telemetry-interval", type=float, default=2.0, help="seconds between telemetry updates")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s: %(message)s")
 
@@ -198,10 +263,12 @@ def main():
     manager = SystemManager(a.policy, a.workers, AllocationEngine(a.optimizer_slots))
     manager.start()
     threading.Thread(target=monitor, args=(manager,), daemon=True, name="monitor").start()
+    threading.Thread(target=telemetry, args=(manager, a.telemetry_interval), daemon=True, name="telemetry").start()
     try:
         CommunicationManager(a.host, a.port, manager).serve_forever()
     except KeyboardInterrupt:
         log.info("shutting down")
+
 
 if __name__ == "__main__":
     main()

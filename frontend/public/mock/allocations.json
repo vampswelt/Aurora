@@ -1,0 +1,29 @@
+[
+  {
+    "allocation_id": "AL-7712",
+    "request_id": "REQ-410",
+    "resource": "CHIPS",
+    "supplier": "SUP-TW",
+    "quantity": 4500,
+    "status": "ACTIVE",
+    "allocated_at": "00:01:43"
+  },
+  {
+    "allocation_id": "AL-7711",
+    "request_id": "REQ-409",
+    "resource": "DISPLAYS",
+    "supplier": "SUP-KR",
+    "quantity": 4500,
+    "status": "ACTIVE",
+    "allocated_at": "00:01:40"
+  },
+  {
+    "allocation_id": "AL-7710",
+    "request_id": "REQ-408",
+    "resource": "BATTERIES",
+    "supplier": "SUP-CN",
+    "quantity": 6500,
+    "status": "DELIVERED",
+    "allocated_at": "00:01:28"
+  }
+]
